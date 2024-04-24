@@ -6,25 +6,30 @@ DATAIN_DIR=./mount/datapipeline/datain
 DATAOUT_DIR=./mount/datapipeline/dataout
 FILELIST=./mount/tmp/filelist
 
-[[ -f ${FILELIST} ]] || ls ${DATAIN_DIR} > ${FILELIST}
+
+cur_files=$(ls ${DATAIN_DIR})
+echo $cur_files > ${FILELIST}
 
 echo "Monitoring ${DATAIN_DIR} for new files."
 while : ; do
-    cur_files=$(ls -1 ${DATAIN_DIR})
-    diff -u <(cat ${FILELIST}) <(echo $cur_files) || \
-         { echo "Alert: ${DATAIN_DIR} changed $(date)" ;
-           # Overwrite file list with the new one.
-           echo $cur_files > ${FILELIST} ;
-           # date > ${DATAOUT_DIR}/date_file.txt
-           TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
-           OUTFILE=${TMP_DIR}/Out_file_${TIMESTAMP}.txt
-           touch $OUTFILE
-           printf "New file was detected...\n" >> $OUTFILE
-           cat ${FILELIST} >> $OUTFILE
-           mv $OUTFILE $DATAOUT_DIR
-           
-         }
+    cur_files=$(ls ${DATAIN_DIR})
+    
+    if diff --brief --ignore-all-space <(cat ${FILELIST}) <(echo $cur_files) >/dev/null ; then
+        printf "$(date): No changes detected in ${DATAIN_DIR}.\n"
+        :
+    else
+        diff -u <(cat ${FILELIST}) <(echo $cur_files) || \
+            { printf "$(date): Changes detected in ${DATAIN_DIR}. \n" ;
+            # Overwrite file list with the new one.
+            echo $cur_files > ${FILELIST} ;
+            TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
+            OUTFILE=${TMP_DIR}/Out_file_${TIMESTAMP}.txt
+            touch $OUTFILE
+            printf "Changes were detected, list of files: \n" >> $OUTFILE
+            cat ${FILELIST} >> $OUTFILE
+            mv $OUTFILE $DATAOUT_DIR
+            }
+    fi
 
-    echo "Waiting for changes."
     sleep $(expr 60 \* 1)
 done
